@@ -1,117 +1,118 @@
 import sys
-import tkinter
-from tkinter import Tk, RIGHT, LEFT
-import cv2
-import PIL.Image, PIL.ImageTk
 import time
+import glob
+import argparse
+import cv2
+import tkinter
+from tkinter import Tk, RIGHT, LEFT, W, E
+import PIL.Image, PIL.ImageTk
 
-class App:
+WIDTH_PROP = 3
+HEIGHT_PROP = 4
 
-    def __init__(self, window, window_title, video_source=4):
-        self.window = window
-        self.window.title(window_title)
-        self.video_source = video_source
+def get_filename(count):
+    return str(count).zfill(7) + "-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg"
 
-        """
-        self.window.columnconfigure(0, pad=3)
-        self.window.columnconfigure(1, pad=3)
-        self.window.rowconfigure(0, pad=3)
-        self.window.rowconfigure(1, pad=3)
-        self.window.rowconfigure(2, pad=3)
-        """
+def preview(camera):
 
-        self.running = False
+    class PreviewApp:
+        def __init__(self, window, window_title, device):
 
-         # open video source (by default this will try to open the computer webcam)
-        self.video_label = tkinter.Label(window, text="Live feed")
-        # self.video_label.grid(row=0, column=0)
-        self.video_label.pack()
-        self.vid = MyVideoCapture(self.video_source)
+            self.window = window
+            self.window.title(window_title)
+            self.device = device
+            self.video = self.init_video(device)
 
-        # Create a canvas that can fit the above video source size
-        self.canvas = tkinter.Canvas(window, width = self.vid.width * 2, height = self.vid.height)
-        # self.canvas.grid(row=1)
-        self.canvas.pack()
+            self.live_canvas = tkinter.Canvas(window, width=self.video.get(WIDTH_PROP), height=self.video.get(HEIGHT_PROP))
+            self.live_canvas.grid(row=1, column=0, columnspan=1)
 
-        self.btn_toggle=tkinter.Button(window, text="Start", width=50, command=self.toggle)
-        # self.btn_toggle.grid(row=2)
-        self.btn_toggle.pack()
+            self.update()
+            self.window.mainloop()
 
-        self.delay_label = tkinter.Label(window, text="Seconds between photos:")
-        # self.delay_label.grid(row=2)
-        self.delay_label.pack()
-        self.delay_entry = tkinter.Entry(window, text="60")
-        # self.delay_entry.grid(row=2)
-        self.delay_entry.pack()
+        def init_video(self, device):
+            camera = cv2.VideoCapture(device)
+            camera.set(WIDTH_PROP, 7680)
+            camera.set(HEIGHT_PROP, 4320)
+            return camera
 
-        self.duration_label = tkinter.Label(window, text="Maximum minutes to run")
-        self.duration_label.pack()
-        self.duration_entry = tkinter.Entry(window, text="60")
-        self.duration_entry.pack()
-
-        self.start_time = time.time()
-        self.last_time = time.time()
-        self.count = 0
-        self.delay = 15
-        self.update()
-
-        self.window.mainloop()
-
-    def toggle(self):
-        self.running = not self.running
-        self.interval = int(self.delay_entry.get())
-        self.btn_toggle['text'] = "Stop" if self.running else "Start"
-
-
-    def update(self):
-        # Get a frame from the video source
-        ret, frame = self.vid.get_frame()
-
-        if ret:
-            self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame))
-            self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW)
-
-        if self.running:
-            now = time.time()
-            if time.time() - self.last_time > self.interval:
-                self.last_time = now
-                ret, frame = self.vid.get_frame()
-                if ret:
-                    self.count += 1
-                    cv2.imwrite(str(self.count).zfill(7) + "-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-
-        self.window.after(self.delay, self.update)
-
-class MyVideoCapture:
-    def __init__(self, video_source=0):
-        self.vid = cv2.VideoCapture(video_source)
-        if not self.vid.isOpened():
-             raise ValueError("Unable to open video source", video_source)
-
-        # Get video source width and height
-        self.width = self.vid.get(cv2.CAP_PROP_FRAME_WIDTH)
-        self.height = self.vid.get(cv2.CAP_PROP_FRAME_HEIGHT)
-
-    def get_frame(self):
-         if self.vid.isOpened():
-             ret, frame = self.vid.read()
-             if ret:
-                 # Return a boolean success flag and the current frame converted to BGR
-                 return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        def get_frame(self):
+             if self.video.isOpened():
+                 ret, frame = self.video.read()
+                 if ret:
+                     return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                 else:
+                     return (ret, None)
              else:
                  return (ret, None)
-         else:
-             return (ret, None)
 
-    # Release the video source when the object is destroyed
-    def __del__(self):
-        if self.vid.isOpened():
-            self.vid.release()
+        def update(self):
+            ret, frame = self.get_frame()
 
-# Create a window and pass it to the Application object
-if len(sys.argv) == 2:
-    video_source = int(sys.argv[1])
+            if ret:
+                self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame))
+                self.live_canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW)
+
+            self.window.after(16, self.update)
+
+    PreviewApp(tkinter.Tk(), "Timelapse", device)
+
+
+def capture_photos(device, interval, duration):
+
+    camera = cv2.VideoCapture(device)
+    if not camera.isOpened():
+        print("Unable to open device", device)
+        sys.exit(1)
+
+    camera.set(WIDTH_PROP, 7680)
+    camera.set(HEIGHT_PROP, 4320)
+
+    count = 0
+    start = time.time()
+    last = start
+
+    while True:
+        now = time.time()
+
+        if camera.isOpened():
+            ret, frame = camera.read()
+            cv2.imwrite(get_filename(count), frame)
+            count += 1
+        else:
+            print("Could not access device")
+            sys.exit(1)
+
+        if now - start > duration:
+            camera.release()
+            print("Finished taking photos")
+            sys.exit(0)
+
+        time.sleep(interval)
+
+def get_video_devices():
+    return glob.glob('/dev/video*')
+
+def init_argparse():
+
+    parser = argparse.ArgumentParser(
+        prog="timelapse",
+        usage="%(prog)s [OPTION]",
+        description="Takes photos at some interval."
+    )
+
+    parser.add_argument('-c', '--camera',  nargs='?', choices=get_video_devices(), help="Which camera device to use")
+    parser.add_argument('-i', '--interval',  nargs='?', type=int, default=10, help="Seconds between photos (default: 10)")
+    parser.add_argument('-d', '--duration',  nargs='?', type=int, default=240, help="Total number of seconds to take photos for (default: 240)")
+    parser.add_argument('-p', '--preview', action="store_true", help="Show a window with the selected device. No photos will be taken if this option is present.")
+
+    return parser
+
+parser = init_argparse();
+args = parser.parse_args()
+
+device = int(args.camera.replace('/dev/video', ''))
+
+if args.preview:
+    preview(device)
 else:
-    video_source = 0
-
-App(tkinter.Tk(), "Tkinter and OpenCV", video_source=video_source)
+    capture_photos(device, args.interval, args.duration)
