@@ -100,10 +100,10 @@ def init_argparse():
         description="Takes photos at some interval."
     )
 
-    parser.add_argument('-c', '--camera',  nargs='?', choices=get_video_devices(), help="Which camera device to use")
+    parser.add_argument('-c', '--camera',  required=True, choices=get_video_devices(), help="Which camera device to use")
     parser.add_argument('-i', '--interval',  nargs='?', type=int, default=10, help="Seconds between photos (default: 10)")
     parser.add_argument('-d', '--duration',  nargs='?', type=int, default=240, help="Total number of seconds to take photos for (default: 240)")
-    parser.add_argument('-p', '--preview', action="store_true", help="Show a window with the selected device. No photos will be taken if this option is present.")
+    parser.add_argument('-p', '--preview', action="store_true", help="Show a window with the selected device. No photos will be taken if this option is present. Use this with a camera option to find the device you want.")
 
     return parser
 
